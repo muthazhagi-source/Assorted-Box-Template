@@ -368,13 +368,13 @@ if file_path is not None:
 
     # Save final output
     output_df = pd.DataFrame(final_output)
-    output_df["Total_Qty"] = output_df["Assorted_Box_Pcs"] + output_df["Mix_Box_Pcs"] + output_df["Adjusted_Qty"]
-    grouped = output_df.groupby(["STYLE", "SIZE"])[["Assorted_Box_Pcs", "Mix_Box_Pcs", "Adjusted_Qty", "Total_Qty"]].sum()
+    output_df["Total_Qty"] = output_df["Assorted_Box_Pcs"] + output_df["Mix_Box_Pcs"] + output_df["Loose_Pcs"]
+    grouped = output_df.groupby(["STYLE", "SIZE"])[["Assorted_Box_Pcs", "Mix_Box_Pcs", "Loose_Pcs", "Total_Qty"]].sum()
 
     percentage_df = pd.DataFrame()
     percentage_df["ASSORTED BOX%"] = (grouped["Assorted_Box_Pcs"] / grouped["Total_Qty"]) * 100
     percentage_df["MIX BOX%"] = (grouped["Mix_Box_Pcs"] / grouped["Total_Qty"]) * 100
-    percentage_df["LOOSE PCS%"] = (grouped["Adjusted_Qty"] / grouped["Total_Qty"]) * 100
+    percentage_df["LOOSE PCS%"] = (grouped["Loose_Pcs"] / grouped["Total_Qty"]) * 100
     percentage_df = percentage_df.reset_index()
 
     size_order = ["S","M", "L", "XL", "2XL", "3XL", "4XL", "5XL"]
