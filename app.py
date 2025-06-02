@@ -395,16 +395,16 @@ if file_path is not None:
 
     # Download button for the final output
     def to_excel():
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        output_df.to_excel(writer, sheet_name='OVERALL', index=False)
-        final_mix_box_df.to_excel(writer, sheet_name='MIX BOX BREAKUP', index=False)
-        percentage_df.to_excel(writer, sheet_name='BOX PERCENT', index=False)
-    processed_data = output.getvalue()
-    return processed_data
-    if st.button('Generate Download Link'):
-        excel_data = to_excel()
-        st.download_button(label='Download Excel File',
-                           data=excel_data,
-                           file_name='assorted_packing_template.xlsx',
-                           mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                output_df.to_excel(writer, sheet_name='OVERALL', index=False)
+                final_mix_box_df.to_excel(writer, sheet_name='MIX BOX BREAKUP', index=False)
+                percentage_df.to_excel(writer, sheet_name='BOX PERCENT', index=False)
+            return output.getvalue()
+    excel_data = to_excel()
+    st.download_button(label='Download Excel File',
+                       data=excel_data,
+                       file_name='assorted_packing_template.xlsx',
+                       mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+else:
+    st.warning("No output generated from the uploaded file and data.")
