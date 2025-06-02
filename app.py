@@ -395,16 +395,17 @@ if file_path is not None:
 
     # Download button for the final output
     def to_excel():
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                output_df.to_excel(writer, sheet_name='OVERALL', index=False)
-                final_mix_box_df.to_excel(writer, sheet_name='MIX BOX BREAKUP', index=False)
-                percentage_df.to_excel(writer, sheet_name='BOX PERCENT', index=False)
-            return output.getvalue()
-    excel_data = to_excel()
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            output_df.to_excel(writer, sheet_name='OVERALL', index=False)
+            final_mix_box_df.to_excel(writer, sheet_name='MIX BOX BREAKUP', index=False)
+            percentage_df.to_excel(writer, sheet_name='BOX PERCENT', index=False)
+        output.seek(0)  # Move to the beginning of the BytesIO buffer
+        return output.getvalue()
+        # Create a download button that regenerates the Excel file each time
     st.download_button(label='Download Excel File',
-                       data=excel_data,
-                       file_name='assorted_packing_template.xlsx',
-                       mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                      data=to_excel(),
+                      file_name='assorted_packing_template.xlsx',
+                      mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 else:
     st.warning("No output generated from the uploaded file and data.")
