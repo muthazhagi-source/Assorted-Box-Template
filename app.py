@@ -153,8 +153,8 @@ if file_path is not None:
                     row = {'Box No': f'Mix Box {i}'}
                     row.update(box)
                     mix_box_rows.append(row)
-
-                colors = list(mix_box_pcs[0].keys())
+                assorted_box_pcs1 = dict(assorted_box_pcs)
+                colors = list(assorted_box_pcs1.keys())
                 mix_box_df = pd.DataFrame({f"MIX BOX {i+1}": list(box.values()) for i, box in enumerate(mix_box_pcs)})
                 mix_box_df.insert(0, "COLOUR", colors)
                 mix_box_df.insert(0, "SIZE", size)
@@ -237,8 +237,8 @@ if file_path is not None:
                 for c, _ in negatives:
                     adjusted_qty[c] = 0
                     labels[c] = "single"
-
-                colors = list(mix_box_pcs[0].keys())
+                assorted_box_pcs1 = dict(assorted_box_pcs)
+                colors = list(assorted_box_pcs1.keys())
                 mix_box_df = pd.DataFrame({f"MIX BOX {i+1}": list(box.values()) for i, box in enumerate(mix_box_pcs)})
                 mix_box_df.insert(0, "COLOUR", colors)
                 mix_box_df.insert(0, "SIZE", size)
@@ -348,8 +348,8 @@ if file_path is not None:
 
             stock_lookup = {c: q for c, q in final_stock2}
             label_lookup = {c: t for c, t in final_labels}
-
-            colors = list(mix_box_pcs[0].keys())
+            assorted_box_pcs1 = dict(assorted_box_pcs)
+            colors = list(assorted_box_pcs1.keys())
             mix_box_df = pd.DataFrame({f"MIX BOX {i+1}": list(box.values()) for i, box in enumerate(mix_box_pcs)})
             mix_box_df.insert(0, "COLOUR", colors)
             mix_box_df.insert(0, "SIZE", size)
