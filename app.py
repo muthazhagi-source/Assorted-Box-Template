@@ -394,10 +394,17 @@ if file_path is not None:
     st.dataframe(percentage_df)
 
     # Download button for the final output
-    output_file = "ASSORTED_PACKING_TEMPLATE.xlsx"
-    with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
-        pd.DataFrame(output_df).to_excel(writer, sheet_name='OVERALL', index=False)
-        pd.DataFrame(final_mix_box_df).to_excel(writer, sheet_name='MIX BOX BREAKUP', index=False)
-        pd.DataFrame(percentage_df).to_excel(writer, sheet_name='BOX PERCENT', index=False)
-
-    st.download_button("Download Excel File", output_file)
+    def to_excel():
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        output_df.to_excel(writer, sheet_name='OVERALL', index=False)
+        final_mix_box_df.to_excel(writer, sheet_name='MIX BOX BREAKUP', index=False)
+        percentage_df.to_excel(writer, sheet_name='BOX PERCENT', index=False)
+    processed_data = output.getvalue()
+    return processed_data
+    if st.button('Generate Download Link'):
+        excel_data = to_excel()
+        st.download_button(label='Download Excel File',
+                           data=excel_data,
+                           file_name='assorted_packing_template.xlsx',
+                           mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
