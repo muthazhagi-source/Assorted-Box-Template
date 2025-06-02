@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 from collections import defaultdict, Counter
 import math
+import io
 
 # Title of the app
 st.title("Assorted Packing Template Generator")
