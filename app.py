@@ -24,7 +24,7 @@ if file_path is not None:
     # Read input file
     df = pd.read_excel(file_path)
 
-    sizes = ['M', 'L', 'XL', '2XL']
+    sizes = ['S','M', 'L', 'XL', '2XL','3XL','4XL','5XL']
     final_output = []
 
     # Map colour to style
@@ -167,8 +167,8 @@ if file_path is not None:
                         'COLOUR': colour,
                         'Assorted_Box_Pcs': assorted,
                         'Mix_Box_Pcs': mix,
-                        'Adjusted_Qty': adjusted_qty.get(colour, 0),
-                        'Label': labels.get(colour, '')
+                        'Loose_Pcs': adjusted_qty.get(colour, 0),
+                        'Single/Double': labels.get(colour, '')
                     })
 
             else:
@@ -251,8 +251,8 @@ if file_path is not None:
                         'COLOUR': colour,
                         'Assorted_Box_Pcs': assorted,
                         'Mix_Box_Pcs': mix,
-                        'Adjusted_Qty': adjusted_qty.get(colour, 0),
-                        'Label': labels.get(colour, '')
+                        'Loose_Pcs': adjusted_qty.get(colour, 0),
+                        'Single/Double': labels.get(colour, '')
                     })
 
         else:
@@ -362,8 +362,8 @@ if file_path is not None:
                     'COLOUR': colour,
                     'Assorted_Box_Pcs': assorted,
                     'Mix_Box_Pcs': mix,
-                    'final_stock2': stock_lookup.get(colour, 0),
-                    'final_labels': label_lookup.get(colour, '')
+                    'Loose_Pcs': stock_lookup.get(colour, 0),
+                    'Single/Double': label_lookup.get(colour, '')
                 })
 
     # Save final output
@@ -377,7 +377,7 @@ if file_path is not None:
     percentage_df["LOOSE PCS%"] = (grouped["Adjusted_Qty"] / grouped["Total_Qty"]) * 100
     percentage_df = percentage_df.reset_index()
 
-    size_order = ["M", "L", "XL", "2XL"]
+    size_order = ["S","M", "L", "XL", "2XL", "3XL", "4XL", "5XL"]
     percentage_df["SIZE"] = pd.Categorical(percentage_df["SIZE"], categories=size_order, ordered=True)
     percentage_df = percentage_df.sort_values(by=["STYLE", "SIZE"])
     percentage_df = percentage_df.round(2)
