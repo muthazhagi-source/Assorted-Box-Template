@@ -11,61 +11,268 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from collections import defaultdict, Counter
-import io
+import math
 
-st.title("ASSORTED BOX PACKING TEMPLATE")
+# Title of the app
+st.title("Assorted Packing Template Generator")
 
-uploaded_file = st.file_uploader("Upload the input file", type=["xlsx"])
+# File uploader for the Excel file
+file_path = st.file_uploader("Upload your Excel file", type=["xlsx"])
 
-if uploaded_file:
-    df = pd.read_excel(uploaded_file)
-    sizes = ['S','M', 'L', 'XL', '2XL','3XL','4XL','5XL']
+if file_path is not None:
+    # Read input file
+    df = pd.read_excel(file_path)
+
+    sizes = ['M', 'L', 'XL', '2XL']
     final_output = []
+
+    # Map colour to style
     style_dict = df.set_index('COLOUR')['STYLE'].to_dict()
+    all_mix_boxes = []
 
     for size in sizes:
         remaining_list = [(row['COLOUR'], row[size]) for _, row in df.iterrows()]
-    colours = [colour for colour, _ in remaining_list]
-    total_colours = len(colours)
+        colours = [colour for colour, _ in remaining_list]
+        total_colours = len(colours)
 
-    grouped = defaultdict(list)
-    for colour, qty in remaining_list:
-        grouped[colour].append(qty)
-
-    colour_counts = pd.Series(colours).value_counts()
-    duplicates = colour_counts[colour_counts > 1]
-
-    #if not duplicates.empty:
-    if (colour_counts >= 3).sum() >= 1:
-        combined = defaultdict(int)
+        grouped = defaultdict(list)
         for colour, qty in remaining_list:
-            combined[colour] += qty
+            grouped[colour].append(qty)
 
-        min_qty = min(combined.values())
-        equalized = []
-        adjusted = []
+        colour_counts = pd.Series(colours).value_counts()
+        duplicates = colour_counts[colour_counts > 1]
 
-        for colour, total_qty in combined.items():
-            times = len(grouped[colour])
-            equal_qty = min_qty * times
-            adjusted_qty = total_qty - equal_qty
-            equalized.append((colour, equal_qty))
-            adjusted.append((colour, adjusted_qty))
+        if (colour_counts >= 3).sum() >= 1:
+            combined = defaultdict(int)
+            for colour, qty in remaining_list:
+                combined[colour] += qty
 
-        total_remaining = sum(qty for _, qty in adjusted)
-        box_qty = total_remaining // total_colours
+            min_qty = min(combined.values())
+            equalized = []
+            adjusted = []
 
-        colour_counts = Counter(colours)
-        repeated_colours = [colour for colour, count in colour_counts.items() if count > 1]
-        repeated_total_qty = sum(qty for colour, qty in adjusted if colour in repeated_colours)
+            for colour, total_qty in combined.items():
+                times = len(grouped[colour])
+                equal_qty = min_qty * times
+                adjusted_qty = total_qty - equal_qty
+                equalized.append((colour, equal_qty))
+                adjusted.append((colour, adjusted_qty))
 
-        unique_colours = {colour for colour, count in colour_counts.items() if count == 1}
-        unique_sum = sum(qty for colour, qty in adjusted if colour in unique_colours)
-        unique_count = len(unique_colours)
+            total_remaining = sum(qty for _, qty in adjusted)
+            box_qty = total_remaining // total_colours
 
-        box_qty1 = box_qty * max(colour_counts.values())
+            colour_counts = Counter(colours)
+            repeated_colours = [colour for colour, count in colour_counts.items() if count > 1]
+            repeated_total_qty = sum(qty for colour, qty in adjusted if colour in repeated_colours)
 
-        if box_qty1 > repeated_total_qty:
+            unique_colours = {colour for colour, count in colour_counts.items() if count == 1}
+            unique_sum = sum(qty for colour, qty in adjusted if colour in unique_colours)
+            unique_count = len(unique_colours)
+
+            box_qty1 = box_qty * max(colour_counts.values())
+
+            if box_qty1 > repeated_total_qty:
+                final_repeated_stock = {
+                    colour: qty - (box_qty * colours.count(colour))
+                    for colour, qty in adjusted
+                }
+
+                final_stock1 = []
+                for colour, qty in equalized:
+                    repeated_qty = final_repeated_stock.get(colour, 0)
+                    final_stock1.append((colour, qty + repeated_qty))
+
+                negative_sum = sum(qty for qty in final_repeated_stock.values() if qty < 0)
+                adjusted_stock = [(colour, qty - abs(negative_sum) * colours.count(colour)) for colour, qty in equalized]
+
+                mix_box_pcs1 = [
+                    (final_colour, final_qty - adjusted_qty)
+                    for (final_colour, final_qty), (_, adjusted_qty) in zip(final_stock1, adjusted_stock)
+                ]
+                mix_box_pcs = []
+
+                current_state = final_repeated_stock.copy()
+                for color, value in final_repeated_stock.items():
+                    if value < 0:
+                        shortage = abs(value)
+                        if colours.count(color) > 2:
+                            boxes_to_open = shortage // 1
+                            generated = {c: boxes_to_open for c, _ in equalized}
+                            generated[color] -= shortage
+                            current_state[color] += shortage
+                            remaining = shortage
+                        else:
+                            boxes_to_open = math.ceil(shortage / colour_counts[color])
+                            generated = {c: boxes_to_open * colour_counts[c] for c in colour_counts}
+                            generated[color] -= shortage
+                            current_state[color] += shortage
+                            remaining = shortage
+                        for c in generated:
+                            if c == color:
+                                continue
+                            if current_state[c] > 0 and remaining > 0:
+                                take = min(remaining, current_state[c])
+                                current_state[c] -= take
+                                generated[c] += take
+                                remaining -= take
+                                if remaining == 0:
+                                    break
+
+                        mix_box_pcs.append(generated.copy())
+
+                assorted_box_pcs = [(colour, qty + box_qty * colours.count(colour)) for colour, qty in adjusted_stock]
+
+                positives = [(c, q) for c, q in final_repeated_stock.items() if q > 0 and c not in repeated_colours]
+                negatives = [(c, q) for c, q in final_repeated_stock.items() if q < 0]
+                repeated = [(c, q) for c, q in final_repeated_stock.items() if c in repeated_colours]
+
+                total_positive = sum(q for _, q in positives)
+                total_negative = -sum(q for _, q in negatives)
+
+                adjusted_qty = {}
+                labels = {}
+
+                for c, q in repeated:
+                    adjusted_qty[c] = q
+                    labels[c] = "single"
+
+                for c, q in positives:
+                    proportion = q / total_positive if total_positive else 0
+                    deduction = round(proportion * total_negative)
+                    remaining = max(q - deduction, 0)
+                    adjusted_qty[c] = 1 if remaining > 0 else 0
+                    labels[c] = "double"
+
+                for c, _ in negatives:
+                    adjusted_qty[c] = 0
+                    labels[c] = "single"
+
+                mix_box_rows = []
+                for i, box in enumerate(mix_box_pcs, 1):
+                    row = {'Box No': f'Mix Box {i}'}
+                    row.update(box)
+                    mix_box_rows.append(row)
+
+                colors = list(mix_box_pcs[0].keys())
+                mix_box_df = pd.DataFrame({f"MIX BOX {i+1}": list(box.values()) for i, box in enumerate(mix_box_pcs)})
+                mix_box_df.insert(0, "COLOUR", colors)
+                mix_box_df.insert(0, "SIZE", size)
+                all_mix_boxes.append(mix_box_df)
+
+                for (colour, assorted), (_, mix) in zip(assorted_box_pcs, mix_box_pcs1):
+                    final_output.append({
+                        'STYLE': style_dict.get(colour, ''),
+                        'SIZE': size,
+                        'COLOUR': colour,
+                        'Assorted_Box_Pcs': assorted,
+                        'Mix_Box_Pcs': mix,
+                        'Adjusted_Qty': adjusted_qty.get(colour, 0),
+                        'Label': labels.get(colour, '')
+                    })
+
+            else:
+                if unique_count > 0:
+                    box_qty1 = unique_sum // unique_count
+                final_repeated_stock1 = {
+                    colour: qty - (box_qty1 * colours.count(colour))
+                    for colour, qty in adjusted
+                }
+
+                final_stock1 = []
+                for colour, qty in equalized:
+                    repeated_qty = final_repeated_stock1.get(colour, 0)
+                    final_stock1.append((colour, qty + repeated_qty))
+
+                negative_sum = sum(qty for qty in final_repeated_stock1.values() if qty < 0)
+                adjusted_stock = [(colour, qty - abs(negative_sum) * colours.count(colour)) for colour, qty in equalized]
+
+                mix_box_pcs1 = [
+                    (final_colour, final_qty - adjusted_qty)
+                    for (final_colour, final_qty), (_, adjusted_qty) in zip(final_stock1, adjusted_stock)
+                ]
+
+                mix_box_pcs = []
+                current_state = final_repeated_stock1.copy()
+                for color, value in final_repeated_stock1.items():
+                    if value < 0:
+                        boxes_to_open = abs(value)
+                        generated = {c: boxes_to_open * colours.count(c) for c, _ in equalized}
+                        generated[color] -= boxes_to_open
+                        current_state[color] += boxes_to_open
+                        for c in current_state:
+                            if c not in repeated_colours and current_state[c] > 0 and boxes_to_open > 0:
+                                take = min(boxes_to_open, current_state[c])
+                                current_state[c] -= take
+                                generated[c] += take
+                                boxes_to_open -= take
+                                if boxes_to_open == 0:
+                                    break
+
+                        mix_box_pcs.append(generated.copy())
+
+                assorted_box_pcs = [(colour, qty + box_qty1 * colours.count(colour)) for colour, qty in adjusted_stock]
+
+                positives = [(c, q) for c, q in final_repeated_stock1.items() if q > 0 and c not in repeated_colours]
+                negatives = [(c, q) for c, q in final_repeated_stock1.items() if q < 0]
+                repeated = [(c, q) for c, q in final_repeated_stock1.items() if c in repeated_colours]
+
+                total_positive = sum(q for _, q in positives)
+                total_negative = -sum(q for _, q in negatives)
+
+                adjusted_qty = {}
+                labels = {}
+
+                for c, q in repeated:
+                    adjusted_qty[c] = q
+                    labels[c] = "single"
+
+                for c, q in positives:
+                    proportion = q / total_positive if total_positive else 0
+                    deduction = round(proportion * total_negative)
+                    remaining = max(q - deduction, 0)
+                    adjusted_qty[c] = 1 if remaining > 0 else 0
+                    labels[c] = "double"
+
+                for c, _ in negatives:
+                    adjusted_qty[c] = 0
+                    labels[c] = "single"
+
+                colors = list(mix_box_pcs[0].keys())
+                mix_box_df = pd.DataFrame({f"MIX BOX {i+1}": list(box.values()) for i, box in enumerate(mix_box_pcs)})
+                mix_box_df.insert(0, "COLOUR", colors)
+                mix_box_df.insert(0, "SIZE", size)
+                all_mix_boxes.append(mix_box_df)
+
+                for (colour, assorted), (_, mix) in zip(assorted_box_pcs, mix_box_pcs1):
+                    final_output.append({
+                        'STYLE': style_dict.get(colour, ''),
+                        'SIZE': size,
+                        'COLOUR': colour,
+                        'Assorted_Box_Pcs': assorted,
+                        'Mix_Box_Pcs': mix,
+                        'Adjusted_Qty': adjusted_qty.get(colour, 0),
+                        'Label': labels.get(colour, '')
+                    })
+
+        else:
+            combined = defaultdict(int)
+            for colour, qty in remaining_list:
+                combined[colour] += qty
+
+            min_qty = min(combined.values())
+            equalized = []
+            adjusted = []
+
+            for colour, total_qty in combined.items():
+                times = len(grouped[colour])
+                equal_qty = min_qty * times
+                adjusted_qty = total_qty - equal_qty
+                equalized.append((colour, equal_qty))
+                adjusted.append((colour, adjusted_qty))
+
+            total_remaining = sum(qty for _, qty in adjusted)
+            box_qty = total_remaining // total_colours
+
             final_repeated_stock = {
                 colour: qty - (box_qty * colours.count(colour))
                 for colour, qty in adjusted
@@ -83,147 +290,17 @@ if uploaded_file:
                 (final_colour, final_qty - adjusted_qty)
                 for (final_colour, final_qty), (_, adjusted_qty) in zip(final_stock1, adjusted_stock)
             ]
-            mix_box_pcs = []
 
-           # Work on a copy of the dictionary so we can update values
+            mix_box_pcs = []
             current_state = final_repeated_stock.copy()
-            current_state = dict(current_state)
-            print(repeated_colours)
-           # Process each color with a shortage
             for color, value in final_repeated_stock.items():
-
-                if value < 0:
-
-                    shortage = abs(value)
-
-                    if colours.count(color) > 2:
-
-                        boxes_to_open = shortage // 1
-
-                        generated = {c: boxes_to_open for c, _ in equalized}
-                        generated[color] -= shortage
-                        current_state[color] += shortage
-                        remaining = shortage
-
-                    else:
-                        boxes_to_open = math.ceil(shortage / colour_counts[color])
-
-                        generated = {c: boxes_to_open * colour_counts[c] for c in colour_counts}
-                        generated[color] -= shortage
-
-                        current_state[color] += shortage
-                        remaining = shortage
-                    for c in generated:
-                        if c == color:
-                            continue
-                        if current_state[c] > 0 and remaining > 0:
-                            take = min(remaining, current_state[c])
-                            current_state[c] -= take
-                            generated[c] += take
-                            remaining -= take
-                            if remaining == 0:
-                                break
-
-                    mix_box_pcs.append(generated.copy())
-
-
-            assorted_box_pcs = [(colour, qty + box_qty * colours.count(colour)) for colour, qty in adjusted_stock]
-
-            positives = [(c, q) for c, q in final_repeated_stock.items() if q > 0 and c not in repeated_colours]
-            negatives = [(c, q) for c, q in final_repeated_stock.items() if q < 0]
-            repeated = [(c, q) for c, q in final_repeated_stock.items() if c in repeated_colours]
-
-            total_positive = sum(q for _, q in positives)
-            total_negative = -sum(q for _, q in negatives)
-
-            adjusted_qty = {}
-            labels = {}
-
-            for c, q in repeated:
-                adjusted_qty[c] = q
-                labels[c] = "single"
-
-            for c, q in positives:
-                proportion = q / total_positive if total_positive else 0
-                deduction = round(proportion * total_negative)
-                remaining = max(q - deduction, 0)
-                adjusted_qty[c] = 1 if remaining > 0 else 0
-                labels[c] = "double"
-
-            for c, _ in negatives:
-                adjusted_qty[c] = 0
-                labels[c] = "single"
-
-            mix_box_rows = []
-            for i, box in enumerate(mix_box_pcs, 1):
-                row = {'Box No': f'Mix Box {i}'}
-                row.update(box)
-                mix_box_rows.append(row)
-            # Convert to DataFrame
-            colors = list(mix_box_pcs[0].keys())
-            mix_box_df = pd.DataFrame({f"MIX BOX {i+1}": list(box.values()) for i, box in enumerate(mix_box_pcs)})
-            mix_box_df.insert(0, "COLOUR", colors)
-            mix_box_df.insert(0, "SIZE", size)
-            all_mix_boxes.append(mix_box_df)
-
-
-
-            for (colour, assorted), (_,mix) in zip(assorted_box_pcs, mix_box_pcs1):
-                final_output.append({
-                    'STYLE': style_dict.get(colour, ''),
-                    'SIZE': size,
-                    'COLOUR': colour,
-                    'Assorted_Box_Pcs': assorted,
-                    'Mix_Box_Pcs': mix,
-                    'Adjusted_Qty': adjusted_qty.get(colour, 0),
-                    'Label': labels.get(colour, '')
-                })
-
-
-
-
-
-        else:
-            if unique_count > 0:
-                box_qty1 = unique_sum // unique_count
-                print("Box Quantity",box_qty1)
-            final_repeated_stock1 = {
-                colour: qty - (box_qty1 * colours.count(colour))
-                for colour, qty in adjusted
-            }
-
-            final_stock1 = []
-            for colour, qty in equalized:
-                repeated_qty = final_repeated_stock1.get(colour, 0)
-                final_stock1.append((colour, qty + repeated_qty))
-
-            negative_sum = sum(qty for qty in final_repeated_stock1.values() if qty < 0)
-            adjusted_stock = [(colour, qty - abs(negative_sum) * colours.count(colour)) for colour, qty in equalized]
-
-            mix_box_pcs1 = [
-                (final_colour, final_qty - adjusted_qty)
-                for (final_colour, final_qty), (_, adjusted_qty) in zip(final_stock1, adjusted_stock)
-            ]
-
-            mix_box_pcs = []
-
-           # Work on a copy of the dictionary so we can update values
-            current_state = final_repeated_stock1.copy()
-            current_state = dict(current_state)
-            for color, value in final_repeated_stock1.items():
                 if value < 0:
                     boxes_to_open = abs(value)
-
-        # Each box contains 1 piece of each color
-                    generated = {c: boxes_to_open * colours.count(c) for c, _ in equalized}
-
-        # Use those pieces to fix the current shortage
+                    generated = {c: boxes_to_open for c, _ in equalized}
                     generated[color] -= boxes_to_open
                     current_state[color] += boxes_to_open
-
-        # Distribute excess from non-repeated colors only
                     for c in current_state:
-                        if c not in repeated_colours and current_state[c] > 0 and boxes_to_open > 0:
+                        if current_state[c] > 0 and boxes_to_open > 0:
                             take = min(boxes_to_open, current_state[c])
                             current_state[c] -= take
                             generated[c] += take
@@ -233,33 +310,43 @@ if uploaded_file:
 
                     mix_box_pcs.append(generated.copy())
 
+            assorted_box_pcs = [(colour, qty + box_qty * colours.count(colour)) for colour, qty in adjusted_stock]
 
-            assorted_box_pcs = [(colour, qty + box_qty1 * colours.count(colour)) for colour, qty in adjusted_stock]
+            positives = [(c, q) for c, q in final_repeated_stock.items() if q > 0]
+            negatives = [(c, q) for c, q in final_repeated_stock.items() if q < 0]
 
-            positives = [(c, q) for c, q in final_repeated_stock1.items() if q > 0 and c not in repeated_colours]
-            negatives = [(c, q) for c, q in final_repeated_stock1.items() if q < 0]
-            repeated = [(c, q) for c, q in final_repeated_stock1.items() if c in repeated_colours]
+            debt = -sum(q for _, q in negatives)
 
-            total_positive = sum(q for _, q in positives)
-            total_negative = -sum(q for _, q in negatives)
-
-            adjusted_qty = {}
+            adjusted = []
             labels = {}
+            remaining = debt
 
-            for c, q in repeated:
-                adjusted_qty[c] = q
-                labels[c] = "single"
+            for colour, qty in positives:
+                if remaining <= 0:
+                    adjusted.append((colour, qty))
+                    labels[colour] = 'single'
+                elif qty >= remaining:
+                    adjusted.append((colour, qty - remaining))
+                    labels[colour] = 'double'
+                    remaining = 0
+                else:
+                    adjusted.append((colour, 0))
+                    labels[colour] = 'double'
+                    remaining -= qty
 
-            for c, q in positives:
-                proportion = q / total_positive if total_positive else 0
-                deduction = round(proportion * total_negative)
-                remaining = max(q - deduction, 0)
-                adjusted_qty[c] = 1 if remaining > 0 else 0
-                labels[c] = "double"
+            final_stock2 = []
+            final_labels = []
+            for colour, qty in final_repeated_stock.items():
+                if qty < 0:
+                    final_stock2.append((colour, 0))
+                    final_labels.append((colour, 'single'))
+                else:
+                    new_qty = next((x[1] for x in adjusted if x[0] == colour), 0)
+                    final_stock2.append((colour, new_qty))
+                    final_labels.append((colour, labels.get(colour, 'single')))
 
-            for c, _ in negatives:
-                adjusted_qty[c] = 0
-                labels[c] = "single"
+            stock_lookup = {c: q for c, q in final_stock2}
+            label_lookup = {c: t for c, t in final_labels}
 
             colors = list(mix_box_pcs[0].keys())
             mix_box_df = pd.DataFrame({f"MIX BOX {i+1}": list(box.values()) for i, box in enumerate(mix_box_pcs)})
@@ -267,168 +354,50 @@ if uploaded_file:
             mix_box_df.insert(0, "SIZE", size)
             all_mix_boxes.append(mix_box_df)
 
-            for (colour, assorted), (_,mix) in zip(assorted_box_pcs, mix_box_pcs1):
+            for (colour, assorted), (_, mix) in zip(assorted_box_pcs, mix_box_pcs1):
                 final_output.append({
                     'STYLE': style_dict.get(colour, ''),
                     'SIZE': size,
                     'COLOUR': colour,
                     'Assorted_Box_Pcs': assorted,
                     'Mix_Box_Pcs': mix,
-                    'Adjusted_Qty': adjusted_qty.get(colour, 0),
-                    'Label': labels.get(colour, '')
+                    'final_stock2': stock_lookup.get(colour, 0),
+                    'final_labels': label_lookup.get(colour, '')
                 })
 
-    else:
-        combined = defaultdict(int)
-        for colour, qty in remaining_list:
-            combined[colour] += qty
+    # Save final output
+    output_df = pd.DataFrame(final_output)
+    output_df["Total_Qty"] = output_df["Assorted_Box_Pcs"] + output_df["Mix_Box_Pcs"] + output_df["Adjusted_Qty"]
+    grouped = output_df.groupby(["STYLE", "SIZE"])[["Assorted_Box_Pcs", "Mix_Box_Pcs", "Adjusted_Qty", "Total_Qty"]].sum()
 
-        min_qty = min(combined.values())
-        equalized = []
-        adjusted = []
+    percentage_df = pd.DataFrame()
+    percentage_df["ASSORTED BOX%"] = (grouped["Assorted_Box_Pcs"] / grouped["Total_Qty"]) * 100
+    percentage_df["MIX BOX%"] = (grouped["Mix_Box_Pcs"] / grouped["Total_Qty"]) * 100
+    percentage_df["LOOSE PCS%"] = (grouped["Adjusted_Qty"] / grouped["Total_Qty"]) * 100
+    percentage_df = percentage_df.reset_index()
 
-        for colour, total_qty in combined.items():
-            times = len(grouped[colour])
-            equal_qty = min_qty * times
-            adjusted_qty = total_qty - equal_qty
-            equalized.append((colour, equal_qty))
-            adjusted.append((colour, adjusted_qty))
+    size_order = ["M", "L", "XL", "2XL"]
+    percentage_df["SIZE"] = pd.Categorical(percentage_df["SIZE"], categories=size_order, ordered=True)
+    percentage_df = percentage_df.sort_values(by=["STYLE", "SIZE"])
+    percentage_df = percentage_df.round(2)
 
-        total_remaining = sum(qty for _, qty in adjusted)
-        box_qty = total_remaining // total_colours
+    final_mix_box_df = pd.concat(all_mix_boxes, ignore_index=True)
 
-        final_repeated_stock = {
-            colour: qty - (box_qty * colours.count(colour))
-            for colour, qty in adjusted
-        }
+    # Display results
+    st.subheader("Final Output")
+    st.dataframe(output_df)
 
-        final_stock1 = []
-        for colour, qty in equalized:
-            repeated_qty = final_repeated_stock.get(colour, 0)
-            final_stock1.append((colour, qty + repeated_qty))
+    st.subheader("Mix Box Breakup")
+    st.dataframe(final_mix_box_df)
 
-        negative_sum = sum(qty for qty in final_repeated_stock.values() if qty < 0)
-        adjusted_stock = [(colour, qty - abs(negative_sum) * colours.count(colour)) for colour, qty in equalized]
+    st.subheader("Box Percentages")
+    st.dataframe(percentage_df)
 
-        mix_box_pcs1 = [
-            (final_colour, final_qty - adjusted_qty)
-            for (final_colour, final_qty), (_, adjusted_qty) in zip(final_stock1, adjusted_stock)
-        ]
+    # Download button for the final output
+    output_file = "ASSORTED_PACKING_TEMPLATE.xlsx"
+    with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
+        pd.DataFrame(output_df).to_excel(writer, sheet_name='OVERALL', index=False)
+        pd.DataFrame(final_mix_box_df).to_excel(writer, sheet_name='MIX BOX BREAKUP', index=False)
+        pd.DataFrame(percentage_df).to_excel(writer, sheet_name='BOX PERCENT', index=False)
 
-        mix_box_pcs = []
-
-        # Work on a copy of the dictionary so we can update values
-        current_state = final_repeated_stock.copy()
-        current_state = dict(current_state)
-        for color, value in final_repeated_stock.items():
-
-            if value < 0:
-                boxes_to_open = abs(value)
-
-           # Each box contains 1 piece of each color
-                generated = {c: boxes_to_open for c, _ in equalized}
-
-
-          # Use those pieces to fix the current shortage
-                generated[color] -= boxes_to_open
-                current_state[color] += boxes_to_open
-
-          # Distribute excess from the generated pieces to compensate
-                for c in current_state:
-                    if current_state[c] > 0 and boxes_to_open > 0:
-                        take = min(boxes_to_open, current_state[c])
-                        current_state[c] -= take
-                        generated[c] += take
-                        boxes_to_open -= take
-                        if boxes_to_open == 0:
-                            break
-
-                mix_box_pcs.append(generated.copy())
-
-        assorted_box_pcs = [(colour, qty + box_qty * colours.count(colour)) for colour, qty in adjusted_stock]
-
-        positives = [(c, q) for c, q in final_repeated_stock.items() if q > 0]
-        negatives = [(c, q) for c, q in final_repeated_stock.items() if q < 0]
-
-        debt = -sum(q for _, q in negatives)
-
-        adjusted = []
-        labels = {}
-        remaining = debt
-
-        for colour, qty in positives:
-            if remaining <= 0:
-                adjusted.append((colour, qty))
-                labels[colour] = 'single'
-            elif qty >= remaining:
-                adjusted.append((colour, qty - remaining))
-                labels[colour] = 'double'
-                remaining = 0
-            else:
-                adjusted.append((colour, 0))
-                labels[colour] = 'double'
-                remaining -= qty
-
-        final_stock2 = []
-        final_labels = []
-        for colour, qty in final_repeated_stock.items():
-            if qty < 0:
-                final_stock2.append((colour, 0))
-                final_labels.append((colour, 'single'))
-            else:
-                new_qty = next((x[1] for x in adjusted if x[0] == colour), 0)
-                final_stock2.append((colour, new_qty))
-                final_labels.append((colour, labels.get(colour, 'single')))
-
-        stock_lookup = {c: q for c, q in final_stock2}
-        label_lookup = {c: t for c, t in final_labels}
-
-        colors = list(mix_box_pcs[0].keys())
-        mix_box_df = pd.DataFrame({f"MIX BOX {i+1}": list(box.values()) for i, box in enumerate(mix_box_pcs)})
-        mix_box_df.insert(0, "COLOUR", colors)
-        mix_box_df.insert(0, "SIZE", size)
-        all_mix_boxes.append(mix_box_df)
-
-        for (colour, assorted), (_, mix) in zip(assorted_box_pcs, mix_box_pcs1):
-            final_output.append({
-                'STYLE': style_dict.get(colour, ''),
-                'SIZE': size,
-                'COLOUR': colour,
-                'Assorted_Box_Pcs': assorted,
-                'Mix_Box_Pcs': mix,
-                'final_stock2': stock_lookup.get(colour, 0),
-                'final_labels': label_lookup.get(colour, '')
-            })
-
-# Save final output
-output_df = pd.DataFrame(final_output)
-output_df["Total_Qty"] = output_df["Assorted_Box_Pcs"] + output_df["Mix_Box_Pcs"] + output_df["Adjusted_Qty"]
-grouped = output_df.groupby(["STYLE","SIZE"])[["Assorted_Box_Pcs", "Mix_Box_Pcs", "Adjusted_Qty", "Total_Qty"]].sum()
-print(grouped)
-percentage_df = pd.DataFrame()
-percentage_df["ASSORTED BOX%"] = (grouped["Assorted_Box_Pcs"] / grouped["Total_Qty"]) * 100
-percentage_df["MIX BOX%"] = (grouped["Mix_Box_Pcs"] / grouped["Total_Qty"]) * 100
-percentage_df["LOOSE PCS%"] = (grouped["Adjusted_Qty"] / grouped["Total_Qty"]) * 100
-percentage_df = percentage_df.reset_index()
-size_order = ["M", "L", "XL", "2XL"]
-percentage_df["SIZE"] = pd.Categorical(percentage_df["SIZE"], categories=size_order, ordered=True)
-# Sort by the custom order
-percentage_df = percentage_df.sort_values(by=["STYLE","SIZE"])
-percentage_df = percentage_df.round(2)
-final_mix_box_df = pd.concat(all_mix_boxes, ignore_index=True)
-output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        output_df.to_excel(writer, sheet_name='OVERALL', index=False)
-        final_mix_box_df.to_excel(writer, sheet_name='MIX BOX BREAKUP', index=False)
-        percentage_df.to_excel(writer, sheet_name='BOX PERCENT', index=False)
-    output.seek(0)
-
-    st.download_button(
-        label="📥 Download Final Excel",
-        data=output,
-        file_name="ASSORTED_PACKING_TEMPLATE.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-    st.success("✅ Processing Complete")
-    #st.dataframe(output_df)
+    st.download_button("Download Excel File", output_file)
