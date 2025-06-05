@@ -95,29 +95,25 @@ if file_path is not None:
                 current_state = final_repeated_stock.copy()
                 for color, value in final_repeated_stock.items():
                     if value < 0:
+
                         shortage = abs(value)
-                        if colours.count(color) > 2:
-                            boxes_to_open = shortage // 1
-                            generated = {c: boxes_to_open for c, _ in equalized}
-                            generated[color] -= shortage
-                            current_state[color] += shortage
-                            remaining = shortage
-                        else:
-                            boxes_to_open = math.ceil(shortage / colour_counts[color])
-                            generated = {c: boxes_to_open * colour_counts[c] for c in colour_counts}
-                            generated[color] -= shortage
-                            current_state[color] += shortage
-                            remaining = shortage
-                        for c in generated:
-                            if c == color:
-                                continue
-                            if current_state[c] > 0 and remaining > 0:
-                                take = min(remaining, current_state[c])
-                                current_state[c] -= take
-                                generated[c] += take
-                                remaining -= take
-                                if remaining == 0:
-                                    break
+                        boxes_to_open = math.ceil(shortage / colours.count(c))
+                        generated = {c: boxes_to_open * colours.count(c) for c, _ in equalized}
+                        generated[color] -= shortage
+                        current_state[color] += shortage
+                        remaining = shortage
+                        if c == color:
+                            continue
+
+                    for c in current_state:
+
+                        if current_state[c] > 0 and remaining > 0:
+                            take = min(remaining, current_state[c])
+                            current_state[c] -= take
+                            generated[c] += take
+                            remaining -= take
+                            if remaining == 0:
+                                break
 
                         mix_box_pcs.append(generated.copy())
 
