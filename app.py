@@ -86,36 +86,49 @@ if file_path is not None:
                 negative_sum = sum(qty for qty in final_repeated_stock.values() if qty < 0)
                 adjusted_stock = [(colour, qty - abs(negative_sum) * colours.count(colour)) for colour, qty in equalized]
 
-                mix_box_pcs1 = [
-                    (final_colour, final_qty - adjusted_qty)
-                    for (final_colour, final_qty), (_, adjusted_qty) in zip(final_stock1, adjusted_stock)
-                ]
+                #mix_box_pcs1 = [
+                    #(final_colour, final_qty - adjusted_qty)
+                    #for (final_colour, final_qty), (_, adjusted_qty) in zip(final_stock1, adjusted_stock)
+                #]
                 mix_box_pcs = []
 
                 current_state = final_repeated_stock.copy()
+                current_state = dict(current_state)
                 for color, value in final_repeated_stock.items():
-                    if value < 0:
+                    if value >= 0:
+                        continue
 
-                        shortage = abs(value)
+                    shortage = abs(value)
+                    repeat_count = colours.count(colour)
+                    if repeat_count > 1:
+                        boxes_to_open = shortage
+                    else:
+
                         boxes_to_open = math.ceil(shortage / colours.count(c))
-                        generated = {c: boxes_to_open * colours.count(c) for c, _ in equalized}
-                        generated[color] -= shortage
-                        current_state[color] += shortage
-                        remaining = shortage
-                        if c == color:
+                    generated = {c: boxes_to_open * colours.count(c) for c, _ in equalized}
+                    generated[color] -= shortage
+                    #current_state[color] += shortage
+                    remaining = shortage
+                    donor_colors = [c for c in current_state if current_state[c] > 0 and c != color]
+                    partial_set = {}
+                    for donor in donor_colors:
+                        donor_available = current_state[donor]
+                        if donor_available == 0:
                             continue
 
-                    for c in current_state:
+                        take = min(remaining, donor_available)
+                        if take == 0:
+                            continue
 
-                        if current_state[c] > 0 and remaining > 0:
-                            take = min(remaining, current_state[c])
-                            current_state[c] -= take
-                            generated[c] += take
-                            remaining -= take
-                            if remaining == 0:
-                                break
-
-                        mix_box_pcs.append(generated.copy())
+                        partial_generated = {c: take * colours.count(c) for c, _ in equalized}
+                        partial_generated[color] -= take
+                        current_state[color] += take
+                        partial_generated[donor] += take
+                        current_state[donor] -= take
+                        remaining -= take
+                        mix_box_pcs.append(partial_generated.copy())
+                        if remaining == 0:
+                            break
 
                 assorted_box_pcs = [(colour, qty + box_qty * colours.count(colour)) for colour, qty in adjusted_stock]
 
@@ -144,6 +157,13 @@ if file_path is not None:
                     adjusted_qty[c] = 0
                     labels[c] = "single"
 
+                mix_box_pcs1 = defaultdict(int)
+                for box in mix_box_pcs:
+                    for colour, qty in box.items():
+                        mix_box_pcs1[colour] += qty
+
+                mix_box_pcs_list = list(mix_box_pcs1.items())
+
                 mix_box_rows = []
                 for i, box in enumerate(mix_box_pcs, 1):
                     row = {'Box No': f'Mix Box {i}'}
@@ -156,14 +176,16 @@ if file_path is not None:
                 mix_box_df.insert(0, "SIZE", size)
                 all_mix_boxes.append(mix_box_df)
 
-                for (colour, assorted), (_, mix) in zip(assorted_box_pcs, mix_box_pcs1):
+
+
+                for (colour, assorted), (_, mix) in zip(assorted_box_pcs, mix_box_pcs_list):
                     final_output.append({
                         'STYLE': style_dict.get(colour, ''),
                         'SIZE': size,
                         'COLOUR': colour,
                         'Assorted_Box_Pcs': assorted,
                         'Mix_Box_Pcs': mix,
-                        'Loose_Pcs': adjusted_qty.get(colour, 0),
+                        'Total_Qty1': combined.get(colour, 0),
                         'Single/Double': labels.get(colour, '')
                     })
 
@@ -190,22 +212,33 @@ if file_path is not None:
 
                 mix_box_pcs = []
                 current_state = final_repeated_stock1.copy()
+                current_state = dict(current_state)
                 for color, value in final_repeated_stock1.items():
                     if value < 0:
                         boxes_to_open = abs(value)
                         generated = {c: boxes_to_open * colours.count(c) for c, _ in equalized}
                         generated[color] -= boxes_to_open
-                        current_state[color] += boxes_to_open
-                        for c in current_state:
-                            if c not in repeated_colours and current_state[c] > 0 and boxes_to_open > 0:
-                                take = min(boxes_to_open, current_state[c])
-                                current_state[c] -= take
-                                generated[c] += take
-                                boxes_to_open -= take
-                                if boxes_to_open == 0:
-                                    break
+                        remaining = boxes_to_open
+                        #current_state[color] += boxes_to_open
+                        donor_colors = [c for c in current_state if c != color and c not in repeated_colours and current_state[c] > 0]
+                        partial_set = {}
+                        for donor in donor_colors:
+                            donor_available = current_state[donor]
+                            if donor_available == 0:
+                                continue
+                            take = min(remaining, donor_available)
+                            if take == 0:
+                                continue
 
-                        mix_box_pcs.append(generated.copy())
+                            partial_generated = {c: take * colours.count(c) for c, _ in equalized}
+                            partial_generated[color] -= take
+                            current_state[color] += take
+                            partial_generated[donor] += take
+                            current_state[donor] -= take
+                            remaining -= take
+                            mix_box_pcs.append(partial_generated.copy())
+                            if remaining == 0:
+                                break
 
                 assorted_box_pcs = [(colour, qty + box_qty1 * colours.count(colour)) for colour, qty in adjusted_stock]
 
@@ -233,6 +266,12 @@ if file_path is not None:
                 for c, _ in negatives:
                     adjusted_qty[c] = 0
                     labels[c] = "single"
+
+                mix_box_pcs1 = defaultdict(int)
+                for box in mix_box_pcs:
+                    for colour, qty in box.items():
+                        mix_box_pcs1[colour] += qty
+                mix_box_pcs_list = list(mix_box_pcs1.items())
                 assorted_box_pcs1 = dict(assorted_box_pcs)
                 colors = list(assorted_box_pcs1.keys())
                 mix_box_df = pd.DataFrame({f"MIX BOX {i+1}": list(box.values()) for i, box in enumerate(mix_box_pcs)})
@@ -240,14 +279,14 @@ if file_path is not None:
                 mix_box_df.insert(0, "SIZE", size)
                 all_mix_boxes.append(mix_box_df)
 
-                for (colour, assorted), (_, mix) in zip(assorted_box_pcs, mix_box_pcs1):
+                for (colour, assorted), (_, mix) in zip(assorted_box_pcs, mix_box_pcs_list):
                     final_output.append({
                         'STYLE': style_dict.get(colour, ''),
                         'SIZE': size,
                         'COLOUR': colour,
                         'Assorted_Box_Pcs': assorted,
                         'Mix_Box_Pcs': mix,
-                        'Loose_Pcs': adjusted_qty.get(colour, 0),
+                        'Total_Qty1': combined.get(colour, 0),
                         'Single/Double': labels.get(colour, '')
                     })
 
@@ -290,22 +329,33 @@ if file_path is not None:
 
             mix_box_pcs = []
             current_state = final_repeated_stock.copy()
+            current_state = dict(current_state)
             for color, value in final_repeated_stock.items():
                 if value < 0:
                     boxes_to_open = abs(value)
                     generated = {c: boxes_to_open for c, _ in equalized}
                     generated[color] -= boxes_to_open
-                    current_state[color] += boxes_to_open
-                    for c in current_state:
-                        if current_state[c] > 0 and boxes_to_open > 0:
-                            take = min(boxes_to_open, current_state[c])
-                            current_state[c] -= take
-                            generated[c] += take
-                            boxes_to_open -= take
-                            if boxes_to_open == 0:
-                                break
+                    #current_state[color] += boxes_to_open
+                    remaining = boxes_to_open
+                    donor_colors = [c for c in current_state if c != color and current_state[c] > 0]
+                    partial_set = {}
+                    for donor in donor_colors:
+                        donor_available = current_state[donor]
+                        if donor_available == 0:
+                            continue
+                        take = min(remaining, donor_available)
+                        if take == 0:
+                            continue
 
-                    mix_box_pcs.append(generated.copy())
+                        partial_generated = {c: take for c, _ in equalized}
+                        partial_generated[color] -= take
+                        current_state[color] += take
+                        partial_generated[donor] += take
+                        current_state[donor] -= take
+                        remaining -= take
+                        mix_box_pcs.append(partial_generated.copy())
+                        if remaining == 0:
+                            break
 
             assorted_box_pcs = [(colour, qty + box_qty * colours.count(colour)) for colour, qty in adjusted_stock]
 
@@ -350,27 +400,32 @@ if file_path is not None:
             mix_box_df.insert(0, "COLOUR", colors)
             mix_box_df.insert(0, "SIZE", size)
             all_mix_boxes.append(mix_box_df)
-
-            for (colour, assorted), (_, mix) in zip(assorted_box_pcs, mix_box_pcs1):
+            mix_box_pcs1 = defaultdict(int)
+            for box in mix_box_pcs:
+                for colour, qty in box.items():
+                    mix_box_pcs1[colour] += qty
+            mix_box_pcs_list = list(mix_box_pcs1.items())
+            for (colour, assorted), (_, mix) in zip(assorted_box_pcs, mix_box_pcs_list):
                 final_output.append({
                     'STYLE': style_dict.get(colour, ''),
                     'SIZE': size,
                     'COLOUR': colour,
                     'Assorted_Box_Pcs': assorted,
                     'Mix_Box_Pcs': mix,
-                    'Loose_Pcs': stock_lookup.get(colour, 0),
+                    'Total_Qty1': combined.get(colour, 0),
                     'Single/Double': label_lookup.get(colour, '')
                 })
 
     # Save final output
     output_df = pd.DataFrame(final_output)
-    output_df["Total_Qty"] = output_df["Assorted_Box_Pcs"] + output_df["Mix_Box_Pcs"] + output_df["Loose_Pcs"]
-    grouped = output_df.groupby(["STYLE", "SIZE"])[["Assorted_Box_Pcs", "Mix_Box_Pcs", "Loose_Pcs", "Total_Qty"]].sum()
+    #output_df["Total_Qty"] = output_df["Assorted_Box_Pcs"] + output_df["Mix_Box_Pcs"] + output_df["Loose_Pcs"]
+    output_df["LOOSE PCS"] = output_df["Total_Qty1"] - (output_df["Mix_Box_Pcs"] + output_df["Assorted_Box_Pcs"])
+    grouped = output_df.groupby(["STYLE", "SIZE"])[["Assorted_Box_Pcs", "Mix_Box_Pcs", "LOOSE PCS", "Total_Qty1"]].sum()
 
     percentage_df = pd.DataFrame()
-    percentage_df["ASSORTED BOX%"] = (grouped["Assorted_Box_Pcs"] / grouped["Total_Qty"]) * 100
-    percentage_df["MIX BOX%"] = (grouped["Mix_Box_Pcs"] / grouped["Total_Qty"]) * 100
-    percentage_df["LOOSE PCS%"] = (grouped["Loose_Pcs"] / grouped["Total_Qty"]) * 100
+    percentage_df["ASSORTED BOX%"] = (grouped["Assorted_Box_Pcs"] / grouped["Total_Qty1"]) * 100
+    percentage_df["MIX BOX%"] = (grouped["Mix_Box_Pcs"] / grouped["Total_Qty1"]) * 100
+    percentage_df["LOOSE PCS%"] = (grouped["LOOSE PCS"] / grouped["Total_Qty1"]) * 100
     percentage_df = percentage_df.reset_index()
 
     size_order = ["S","M", "L", "XL", "2XL", "3XL", "4XL", "5XL"]
